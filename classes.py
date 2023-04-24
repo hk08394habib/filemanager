@@ -1,141 +1,110 @@
 ##The idea will be that we use /abc/efg/hij/kl/mno/filename.py to tell you a traversal of the directory graph from the root. Once you reach the node mno (which is a directory) we require that all children leaves will have unique names. This allows us to search (using binsearch or something) to find the Node with the name filename.py, which will return to us a Node object, which we can then use to create our position object, and which will allow for insertion, deletion, etc.
+import re
+import os
+import hashlib
+
+print(os.getcwd())
+
+class Path():
+    def __init__(self,path):
+        self.path = path
+    
+    def directoryPath(self):
+        newpath = path[:]
+        newpath = newpath.split("/")
+        return newpath[-1]
 
 
+class Dir():
+    def __init__(self,element,parent=None,children=None):
+        self.parent = parent
+        self.children = children
+        self.element = element
+        if children == None and ("." not in element):
+            self.children = []
+        if parent == None:
+            self.parent = ""
+    def __str__(self):
+        showForParent = self.parent.element if self.element != "~" else "None"
+        return f"\n------ \n{self.parent}\n\t{self.element}\n{self.children} \n------\n"
 
-class Tree(): 
-    class Position:
-        def element(self): #element stored at position
-            raise NotImplementedError
-        def __eq__(self,other):
-            raise NotImplementedError
-        def __ne__(self,other):
-            return not (self == other)
+class File():
+    def __init__(self,element,parent=None,children=None):
+        self.parent = parent
+        self.element = element
+        if parent == None:
+            self.parent = ""
+    def __str__(self):
+        showForParent = self.parent.element if self.element != "~" else "None"
+        return f"\n------ \n{self.parent}\n\t{self.element}\n \n------\n"
+
+
+class Tree(): #TODO: base this on the path object
+    def __init__(self,root=os.getcwd()):
+        self.rootpath = root
+        self.root = Dir(root)
+        self.paths = {hashlib.md5(self.rootpath.encode()).hexdigest() : self.root}
+        self.generateRepresentation()
+
+    def hashPath(self,path):
+        return hashlib.md5(path.encode()).hexdigest()
+
+    def generateRepresentation(self): #using BFS generate an internal representation of the Directory Tree
+        level = [os.getcwd()+ "/"  + x for x in os.listdir()]
+        while len(level) > 0:
+            next_level = []
+            for unexploredPath in level:
+                thisNodesContribution = []
+                print(unexploredPath)
+                pathToParent = '/'.join(unexploredPath.split("/")[:-1])
+                unexploredNodeName = unexploredPath.split("/")[-1]
+                print(pathToParent, unexploredNodeName)
+                self.attach(pathToParent, unexploredNodeName)
+                if "." not in unexploredNodeName:
+                    os.chdir(unexploredPath)
+                    unexploredDir = unexploredNodeName
+                    thisNodesContribution = [os.getcwd()+ "/"  + x for x in os.listdir()]
+                    next_level += thisNodesContribution
+            level = next_level
+
+
+    def attach(self,pathToParent,child):
+        parentNode = self.paths[self.hashPath(pathToParent)] 
+        if "." in child:
+            childNode = File(child,parentNode,children=None)
+        else:
+            childNode = Dir(child,parentNode,children=None)
+        parentNode.children.append(childNode)
+        childPath = pathToParent + "/" + child
+        self.paths[hashlib.md5((childPath).encode()).hexdigest()] = childNode
     
 
-    #In what follows, p is a position, and e is an element, and t is a tree
+    def delete(self,pathToNode):
+        hashedPath = self.hashPath(pathToNode)
+        node = self.paths[hashedPath]
+        node.parent.children.remove(node)
+        del self.paths[hashedPath]
+        return node
 
-    #These will be the public access methods we will use for the class, we leave the updating ones to be defined in the concrete class
+    def move(self,startPath,endPath): ##work in progress
+        node = self.delete(startPath)
+        self.attatch(endPath,node)
 
-    def root(self):
-        raise NotImplementedError
-
-    def parent(self,p):
-        raise NotImplementedError
-
-    def children(self,p):
-        raise NotImplementedError
-
-    def num_children(self,p):
-        raise NotImplementedError
-
-    def __len__(self):
-        raise NotImplementedError
-
-    def is_root(self,p):
-        return (p == self.root())
-
-    def is_leaf(self,p):
-        return (self.num_children(p) == 0)
-
-    def is_empty(self):
-        return (len(self) == 0)
-
-class DirTree(Tree):
-    class _Node:
-        __slots__ = '_element','_parent','_children'
-        def __init__(self, element, parent=None, children=None):
-            self._element = element
-            self._parent = parent
-            self._children = children
-    class Position(Tree.Position): #We need this in order to make sure everything is valid
-        def __init__(self,container,node):
-            self._container = container
-            self._node = node
-
-        def element(self):
-            return self._node._element
-
-        def __eq__(self,other):
-            return type(other) is type(self) and other._node is self._node
-    
-    def _validate(self,p): #Check if position is valid, and return node
-        if not isinstance(p,Position):
-            raise TypeError("Not position type")
-        if p._container is not self:
-            raise ValueError("Wrong container")
-        if p._node._parent is p._node: #We delete nodes this way, we're setting a convention
-            raise ValueError("Deprecated")
-
-        return p._node
-
-    def _make_position(self,node): #Check if node is valid and return position
-        return self.Position(self,node) if node is not None else None
-
-    def __init__(self):
-        self._root = None
-        self._size = 0
-    
-    def __len__(self):
-        return self._size
-
-    def root(self): #return the position of root
-        return self._make_position(self._root)
-
-    def parent(self,p): #return position of parent
-        node = self._validate(p) 
-        return self._make_position(node._parent)
-
-    def children(self,p): #allow to iterate over children
-        node = self._validate(p)
-        yield self._make_position(node._children)
-
-    def num_children(self,p):
-        count = 0
-        for c in self.children(p):
-            count += 1
-
-    def _add_root(self,e):
-        if self.root() is not None: raise ValueError("Already existing root")
-        self._size = 1
-        self._root = self._Node(e) 
-        return self._make_position(self._root)
-
-    def _add_child(self,p,e): ##TODO: implement path as a way to traverse the tree from the root node
-        node = self._validate(p)
-        self._size += 1
-        if node._children == None:
-            node._children = []
-        node._children += [self._Node(e,node)]
-        return self._make_position(node._left)
-
-    def _replace(self,p,e):
-        node = self._validate(p)
-        old = node._element
-        node._element = e
-        return old
-    
-    def _delete(self,p): ##TODO
-        node = self._validate(p)
-        self._size -= 1 ##num elements
-
-    def _attach(self,p,t):
-        node = self._validate(p)
-        if not self.is_leaf(p): raise ValueError('Position must be a leaf')
-        if not type(self) is type(t):
-            raise TypeError('Tree types must match')
-        self._size += len(t)
-        if not t.is_empty():
-            t._root._parent = node
-            t._root = None
-            t._size = 0 
+    #def rename
 
 
+    def showTree(self,startNode,depth=1):
+        print("-" * depth + startNode.element,end=" ")
+        if isinstance(startNode,File):
+            print("F")
+        if isinstance(startNode,Dir):
+            print("D")
+            children = startNode.children
+            depth = depth + 1
+            for child in children:
+                self.showTree(child, depth = depth)
 
-
-
-
-
-
-
-
-
+DirTree = Tree()
+DirTree.showTree(DirTree.root)
+DirTree.delete(DirTree.rootpath + "/" + "smalltest.txt")
+DirTree.showTree(DirTree.root)
