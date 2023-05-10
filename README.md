@@ -7,7 +7,7 @@ The program features a simple gui made using tkinter and a base cli application 
 
 This, however, only runs on linux due to Windows' in built security features, understandably. It is a security risk to let some python application scan your filesystem. It's currently tested on arch linux, and we've verified that it DOES NOT work on windows. 
 
-#Usage and installation
+# Usage and installation
 1. Install arch linux (if you do not want to go through this, we're sure that it could work on Ubuntu as well) via a virtual machine or sshing into an online linux shell. Perhaps wine would work as an appropriate emulator, though that also gets in the way with permissions.
 2. Make sure tkinter is installed, along with shutils
 3. Run application.py using python3.10
