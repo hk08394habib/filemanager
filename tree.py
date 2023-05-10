@@ -1,131 +1,173 @@
-from tree import DirTree
+##The idea will be that we use /abc/efg/hij/kl/mno/filename.py to tell you a traversal of the directory graph from the root. Once you reach the node mno (which is a directory) we require that all children leaves will have unique names. This allows us to search (using binsearch or something) to find the Node with the name filename.py, which will return to us a Node object, which we can then use to create our position object, and which will allow for insertion, deletion, etc.
+import re
 import os
-import shutil
+import hashlib
 
-class Application(): 
-    def __init__(self):
-        self.FS = DirTree()
-        self.pwd = self.FS.root
-        self.pwdPath = self.FS.root.path
-        self.addObject("deleted")
-        self.deleted = os.path.join(self.FS.root.path, "deleted")
 
-    #def searchFS: Will search both with tag and name
 
-    def enterDir(self, dirName):
-        directory = self.FS.generateNode(os.path.join(self.pwdPath, dirName))
-        self.pwd = directory
-        self.pwdPath = directory.path
+class Dir():
+    def __init__(self,element,path,parent=None,children=None):
+        self.parent = parent
+        self.children = children
+        self.element = element
+        self.path = path
 
-    def exitDir(self):
-        self.pwd = self.pwd.parent
-        self.pwdPath = self.pwd.path
+        self.size = None #os.path.getsize(self.path)
+        self.lastAccessed = None #os.path.getmtime(self.path)
+        self.creationTime = None # os.path.getctime(self.path)
+    
+        self.isDir = True
+        self.isFile = False
+
+        self.tags = []
+
+        if children == None: 
+            self.children = []
+        if parent == None:
+            self.parent = ""
+
+    def __str__(self):
+        return f"\n------ \n{self.parent}\n\t{self.element}\n{self.children} \n------\n"
+
+class File():
+    def __init__(self,element,path,parent=None,children=None):
+        self.parent = parent
+        self.element = element
+        self.path = path
+
+        #self.size = os.path.getsize(self.path)
+        #self.lastAccessed = os.path.getmtime(self.path)
+        #self.creationTime = os.path.getctime(self.path)
+
+        self.isDir = False
+        self.isFile = True
+
+        self.tags = []
+
+        if parent == None:
+            self.parent = ""
+
+    def __str__(self):
+        showForParent = self.parent.element if self.element != "~" else "None"
+        return f"\n------ \n{self.parent}\n\t{self.element}\n \n------\n"
+
+
+class DirTree(): #TODO: base this on the path object
+    def __init__(self,root=os.getcwd()):
+        self.root = Dir("",root)
+        self.paths = {root : self.root}
+        self.generateTree()
+        self.showTree(self.root)
+
+    def hashPath(self,path): 
+        return hashlib.md5(path.encode()).hexdigest()
+
+    def generateNode(self,path):
+        return self.paths[path]
+
+    def generatePath(self,node):
+        return self.node.path
+
+    def not_in_tree(self,path):
+        try:
+            self.paths[path]
+            return False
+        except:
+            return True
+
+
+
+
+    def generateTree(self): #using BFS generate an internal representation of the Directory Tree
+        level = [os.path.join(os.getcwd(), x) for x in os.listdir()]
+        while len(level) > 0:
+            next_level = []
+            for unexploredPath in level:
+                thisNodesContribution = []
+                pathToParent = os.path.dirname(unexploredPath)
+                unexploredNodeName = os.path.basename(unexploredPath)
+                print(unexploredPath)
+                self.addPath(pathToParent, unexploredNodeName)
+                if "." not in unexploredNodeName and unexploredNodeName != "kivy_venv" and unexploredNodeName[0] != ".":
+                    unexploredDir = unexploredNodeName
+                    thisNodesContribution = [os.path.join(unexploredPath, x) for x in os.listdir(unexploredPath) if self.not_in_tree(os.path.join(unexploredPath,x))]
+                    next_level += thisNodesContribution
+            level = next_level
 
     def searchTree(self,nodeName):
-            self.FS.searchTree(nodeName)
+        level = [child.path for child in self.root.children]
+        while len(level) > 0:
+            next_level = []
+            for path in level:
+                childname = os.path.basename(path)
+                newpath = os.path.dirname(path)
+                if nodeName == childname:
+                    print(path)
+                #print(pathToParent, unexploredNodeName)
+                if "." not in childname:
+                    thisChild = self.generateNode(path)
+                    addition = [child.path for child in thisChild.children]
+                    next_level += (addition)
+            level = next_level
 
-    def openFile(self,nodeName):
-        node = self.FS.generateNode(nodeName)
-        if node.isFile == True:
-            os.startfile(nodeName)
 
-    def retrieveInfo(self, nodeName):
-        node = self.FS.generateNode(nodeName)
-        return [node.tags,node.size,node.lastAccessed,node.creationTime]
+    def addPath(self,pathToParent,childName): #TODO:only add path if it is in Dir
+        #parentNode = self.paths[self.hashPath(pathToParent)] 
+        parentNode = self.generateNode(pathToParent)
+        childPath = pathToParent + "/" + childName
+        try: 
+            self.paths[childPath]
+        except:
+            if "." in childName:
+                childNode = File(childName,childPath,parent=parentNode,children=None)
+            else:
+                childNode = Dir(childName,childPath,parent=parentNode,children=None)
+            parentNode.children.append(childNode)
+            self.paths[childPath] = childNode
+    
 
-    def addTag(self,tag,nodeName):
-        path = os.path.join(self.pwdPath, nodeName)
-        node = self.FS.generateNode(path)
-        node.tags.append(tag)
-
-    def removeTag(self,tag ,nodeName):
-        path = os.path.join(self.pwdPath, nodeName)
-        node = self.FS.generateNode(path)
-        node.tags.remove(tag)
-
-    #def Compress
-
-    #def Decompress
-
-    def addObject(self, nodeName): 
-        print(nodeName)
-        print(self.pwdPath)
-        self.FS.addPath(self.pwdPath,nodeName)
-        childPath = os.path.join(self.pwdPath, nodeName)
-        if "." not in nodeName:
-            try:
-               os.mkdir(childPath)
-            except:
-                pass
-        else:
-            try:
-                fp = open(childPath,"x")
-                fp.close()
-            except:
-                pass
-
-    def remObject(self,nodeName):
-        childPath = os.path.join(self.pwdPath, nodeName)
+    def popPath(self,pathToDir,nodeName):
+        #hashedPath = self.hashPath(pathToNode)
+        #print("here")
+        #print(pathToNode)
+        pathToNode = os.path.join(pathToDir, nodeName)
+        node = self.generateNode(pathToNode)
+        #print(node.element)
+        #print(node)
+        if node.parent == "":
+            print("Error, can not delete root")
+            return 
         try:
-            shutil.move(childPath,self.deleted)
-            self.FS.move(self.pwdPath,self.deleted,nodeName)
-            self.FS.popPath(self.pwdPath,nodeName)
+            node.parent.children.remove(node)
         except:
             pass
+        del self.paths[pathToNode]
+        return node
 
-    def moveObject(self,nodeName, resultPath): #result path is relative to current root
-        path = os.path.join(self.pwdPath, nodeName)
-        finalPath = os.path.join(self.FS.root.path, resultPath)
-        try:
-            shutil.move(path,finalPath)
-            self.FS.move(self.pwdPath,finalPath,nodeName)
-            self.FS.popPath(self.pwdPath,nodeName)
+    def move(self,startPath,endPath,file): ##work in progress
+        node = self.popPath(startPath,file)
+        pathToNode = os.path.join(startPath, file)
+        newParent = self.generateNode(endPath)
+        try: 
+            self.paths[pathToNode]
         except:
-            pass
+            if "." in file:
+                newNode = File(node.element,node.path,parent=newParent)
+            else:
+                newNode = Dir(node.element,node.path,parent=newParent,children=node.children)
+            newParent.children.append(node)
+            self.paths[pathToNode] = node
+
+    def showTree(self,startNode,depth=1):
+        print("-" * depth + startNode.element,end=" ")
+        if isinstance(startNode,File):
+            print("F", startNode.tags)
+        if isinstance(startNode,Dir):
+            print("D", startNode.tags)
+            children = startNode.children
+            depth = depth + 1
+            for child in children:
+                self.showTree(child, depth = depth)
 
 
 
-
-dut = Application()
-dut.addObject("sus")
-"""
-while 0 < 1:
-    command = input("delete, add, move, enter, listDir, addTag, removeTag,exit and the obj name ").split(" ")
-
-    action = command[0]
-    try:
-        obj = command[1]
-    except:
-        obj = None
-    try: 
-        tag = command[2]
-    except:
-        tag = []
-    if action == "delete":
-        dut.remObject(obj)
-    if action == "add":
-        dut.addObject(obj)
-
-    if action == "move":
-        dut.moveObject(obj,tag)
-
-    if action == "addTag":
-        dut.addTag(tag,obj)
-    if action == "removeTag":
-        dut.removeTag(tag,obj)
-    if action == "enter":
-        if obj != "..":
-            dut.enterDir(obj)
-        else:
-            dut.exitDir()
-    if action == "show":
-        dut.FS.showTree(dut.pwd)
-    if action == "open":
-        dut.openFile(obj)
-    if action == "search":
-        dut.searchTree(obj)
-    if action == "exit":
-        break
-        """
-
-dut.FS.showTree(dut.FS.root)
